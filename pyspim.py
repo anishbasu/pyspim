@@ -17,7 +17,7 @@ class Spim(object):
         '''Spawns a Spim instance'''
 
         self.debug = debug
-        
+
         self.sp = pexpect.spawn ('spim')
         self._expect('\(spim\) ')
         if not '(spim)' in self.sp.after:
@@ -38,7 +38,7 @@ class Spim(object):
 
     def _expect(self, pattern, timeout = -1, searchwindowsize = None):
         '''Expect a response from the underlying child process. Respects debug mode. Private.'''
-        
+
         if not self.sp.isalive():
             raise Exception('Child spim process died.')
         if self.debug:
@@ -46,13 +46,13 @@ class Spim(object):
         index = self.sp.expect(pattern, timeout = timeout, searchwindowsize = searchwindowsize)
         if self.debug:
             print 'GOT BEFORE: "%s"' %self.sp.before
-            print 'GOT  AFTER: "%s"' % self.sp.after
+            print 'GOT AFTER: "%s"' % self.sp.after
         return index
 
 
     def load(self, filename):
         '''Loads a program from a *.s file'''
-        
+
         self._sendline('load "%s"' % filename)
         index = self._expect(['Cannot open file.*\(spim\) ',
                              '\(spim\) ',
@@ -73,7 +73,7 @@ class Spim(object):
 
     def run(self, timeout = 10, timeoutFatal = False):
         '''Runs the (presumably) loaded program. Returns None on
-        successful exection or string containing text output on
+        successful execution or string containing text output on
         timeout.'''
 
         self._sendline('run')
@@ -99,6 +99,47 @@ class Spim(object):
         else:
             raise Exception('Unknown error with expect.')
 
+    def step(self, times = 1, timeout = 2, timeoutFatal = False):
+        '''Steps through the loaded program. Returns instruction
+        on successful execution or the text output on timeout.'''
+
+        self._sendline('step {0}'.format(times))
+        index = self._expect(['.*\(spim\) ',
+                              pexpect.EOF,
+                              pexpect.TIMEOUT],
+                             timeout = timeout)
+
+        if index == 0:
+            match = re.search('\n(.*)\n\(spim\) ', self.sp.after, re.DOTALL)
+            instr = match.group(1)
+            return instr
+        elif index == 1:
+            raise Exception('Spim EOF: process died?')
+        elif index == 2:
+            raise Exception('Spim timeout')
+        else:
+            raise Exception('Unknown error with expect')
+
+    def get_all_regs(self, hex_vals = False, timeout = 2):
+        '''Get all registers in the current Spim instance, hex_vals 
+        for hexadecimal values'''
+
+        self._sendline('print_all_regs{0}\n'.format(" hex" if hex_vals else ""))
+        index = self._expect(['.*\(spim\) ',
+                              pexpect.EOF,
+                              pexpect.TIMEOUT],
+                             timeout = timeout)
+        if index == 0:
+            regs = dict()
+            for m in re.finditer("(?P<reg_name>\w+?)\s*(\((?P<abbrev_name>.*?)\))?\s*=\s*(?P<value>[x.0-9a-f]*)", self.sp.after):
+                regs[m.group('reg_name')] = m.group('value')
+            return regs
+        elif index == 1:
+            raise Exception('Spim EOF: process died?')
+        elif index == 2:
+            raise Exception('Spim timeout')
+        else:
+            raise Exception('Unknown error with expect')
 
     def reg(self, register, timeout = 1):
         '''Gets the current value from the given register.
@@ -109,7 +150,7 @@ class Spim(object):
         spim.reg("t0")
         spim.reg("$v0")
         '''
-        
+
         if type(register) is int:
             register = str(register)
         if register[0:1] is not '$':
@@ -138,7 +179,7 @@ class Spim(object):
 
     def quit(self, timeout = 1):
         '''Quits the child spim process'''
-        
+
         self._sendline('quit')
         index = self._expect([pexpect.EOF,
                              pexpect.TIMEOUT],
@@ -169,7 +210,7 @@ def main():
 
     print 'quitting...'
     sp.quit()                     # quit the underlying spim process
-    
+
     print 'done.'
 
 
